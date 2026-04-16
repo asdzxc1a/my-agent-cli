@@ -237,11 +237,11 @@ fn doctor_and_resume_status_emit_json_when_requested() {
         .expect("install source check");
     assert_eq!(
         install_source["official_repo"],
-        "https://github.com/ultraworkers/claw-code"
+        "https://github.com/asdzxc1a/my-agent-cli"
     );
     assert_eq!(
         install_source["deprecated_install"],
-        "cargo install claw-code"
+        "cargo install my-agent-cli"
     );
 
     let workspace = checks
@@ -387,11 +387,11 @@ fn run_claw(current_dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output 
     for (key, value) in envs {
         command.env(key, value);
     }
-    command.output().expect("claw should launch")
+    command.output().expect("nova should launch")
 }
 
 fn write_upstream_fixture(root: &Path) -> PathBuf {
-    let upstream = root.join("claw-code");
+    let upstream = root.join("my-agent-cli");
     let src = upstream.join("src");
     let entrypoints = src.join("entrypoints");
     fs::create_dir_all(&entrypoints).expect("upstream entrypoints dir should exist");
@@ -449,7 +449,7 @@ fn unique_temp_dir(label: &str) -> PathBuf {
         .as_millis();
     let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "claw-output-format-{label}-{}-{millis}-{counter}",
+        "nova-output-format-{label}-{}-{millis}-{counter}",
         std::process::id()
     ))
 }
