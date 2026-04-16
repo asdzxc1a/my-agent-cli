@@ -4139,7 +4139,6 @@ impl LiveCli {
             "file": file,
             "cwd": cwd.display().to_string(),
         });
-        println!("Starting {label} for workspace '{workspace}'...");
         match tools::execute_tool(tool_name, &input) {
             Ok(result) => println!("{result}"),
             Err(error) => eprintln!("error: {error}"),

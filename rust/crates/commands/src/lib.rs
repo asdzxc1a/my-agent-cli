@@ -4315,21 +4315,87 @@ pub fn handle_dashboard_slash_command(cwd: &Path, workspace_name: Option<&str>) 
         (ws, action)
     };
 
-    let lines = vec![
-        format!("╔══════════════════════════════════════════════════════════════╗"),
-        format!("║  NOVA PRODUCER OS — Dashboard                                ║"),
-        format!("╠══════════════════════════════════════════════════════════════╣"),
-        format!("║  Workspace:  {:<48} ║", ws.name),
-        format!("║  Stage:      {:<48} ║", ws.current_stage.to_string()),
-        format!("╠══════════════════════════════════════════════════════════════╣"),
-        format!("║  NEXT ACTION                                                  ║"),
-        format!("║  ➜ {}                                          ║", next_action.command),
-        format!("║     {}                                        ║", next_action.reason),
-        format!("╚══════════════════════════════════════════════════════════════╝"),
+    let stage_icon = stage_status_icon(&ws);
+    let mut lines = vec![
+        String::new(),
+        format!("  {} ═══════════════════════════════════════════════════════════════", ansi_bold("NOVA PRODUCER OS")),
+        format!("  {}  {}", ansi_cyan("Workspace:"), ansi_bold(&ws.name)),
+        format!("  {}  {} {}", ansi_cyan("Stage:"), stage_icon, ansi_bold(&ws.current_stage.to_string())),
+        String::new(),
+        format!("  {}", ansi_yellow("► NEXT ACTION")),
+        format!("  {} {}", ansi_green("➜"), ansi_bold(&next_action.command)),
+        format!("  {} {}", ansi_dim("  "), next_action.reason),
+        String::new(),
     ];
+
+    // Stage progress bar
+    lines.push(format!("  {}", ansi_dim("Pipeline:")));
+    let stages = ["slate", "package", "finance", "comply", "launch"];
+    let mut stage_line = String::from("  ");
+    for (i, s) in stages.iter().enumerate() {
+        let stage_enum = match *s {
+            "slate" => runtime::producer::ProducerStage::Slate,
+            "package" => runtime::producer::ProducerStage::Package,
+            "finance" => runtime::producer::ProducerStage::Finance,
+            "comply" => runtime::producer::ProducerStage::Comply,
+            "launch" => runtime::producer::ProducerStage::Launch,
+            _ => unreachable!(),
+        };
+        let status = ws.stages.get(&stage_enum).copied().unwrap_or_else(|| runtime::producer::StageState::locked()).status;
+        let icon = match status {
+            runtime::producer::StageStatus::Done => ansi_green("✓"),
+            runtime::producer::StageStatus::Running => ansi_yellow("▶"),
+            runtime::producer::StageStatus::Ready => ansi_cyan("○"),
+            runtime::producer::StageStatus::Blocked => ansi_red("!"),
+            runtime::producer::StageStatus::Locked => ansi_dim("○"),
+        };
+        stage_line.push_str(&icon);
+        stage_line.push(' ');
+        stage_line.push_str(&s.chars().next().unwrap().to_uppercase().to_string());
+        if i < stages.len() - 1 {
+            stage_line.push_str(&ansi_dim(" → "));
+        }
+    }
+    lines.push(stage_line);
+    lines.push(String::new());
 
     let message = lines.join("\n");
     Ok(ProducerCommandResult { message, reload_runtime: false })
+}
+
+fn stage_status_icon(ws: &runtime::producer::ProducerWorkspace) -> &'static str {
+    let status = ws.stages.get(&ws.current_stage).copied().unwrap_or_else(|| runtime::producer::StageState::locked()).status;
+    match status {
+        runtime::producer::StageStatus::Done => "✓",
+        runtime::producer::StageStatus::Running => "▶",
+        runtime::producer::StageStatus::Ready => "○",
+        runtime::producer::StageStatus::Blocked => "!",
+        runtime::producer::StageStatus::Locked => "●",
+    }
+}
+
+fn ansi_bold(text: &str) -> String {
+    format!("\x1b[1m{text}\x1b[0m")
+}
+
+fn ansi_cyan(text: &str) -> String {
+    format!("\x1b[36m{text}\x1b[0m")
+}
+
+fn ansi_green(text: &str) -> String {
+    format!("\x1b[32m{text}\x1b[0m")
+}
+
+fn ansi_yellow(text: &str) -> String {
+    format!("\x1b[33m{text}\x1b[0m")
+}
+
+fn ansi_red(text: &str) -> String {
+    format!("\x1b[31m{text}\x1b[0m")
+}
+
+fn ansi_dim(text: &str) -> String {
+    format!("\x1b[2m{text}\x1b[0m")
 }
 
 /// List artifacts in the current workspace.
@@ -4931,7 +4997,7 @@ mod tests {
         assert!(help.contains("aliases: /skill"));
         assert!(!help.contains("/login"));
         assert!(!help.contains("/logout"));
-        assert_eq!(slash_command_specs().len(), 139);
+        assert_eq!(slash_command_specs().len(), 146);
         assert!(resume_supported_slash_commands().len() >= 39);
     }
 

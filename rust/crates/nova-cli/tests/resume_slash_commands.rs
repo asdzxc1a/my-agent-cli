@@ -179,7 +179,10 @@ fn resumed_config_command_loads_settings_files_end_to_end() {
 fn resume_latest_restores_the_most_recent_managed_session() {
     // given
     let temp_dir = unique_temp_dir("resume-latest");
+    fs::create_dir_all(&temp_dir).expect("temp dir should exist");
     let project_dir = temp_dir.join("project");
+    fs::create_dir_all(&project_dir).expect("project dir should exist");
+    let project_dir = fs::canonicalize(&project_dir).unwrap_or_else(|_| project_dir.clone());
     let store = runtime::SessionStore::from_cwd(&project_dir).expect("session store should build");
     let older_path = store.create_handle("session-older").path;
     let newer_path = store.create_handle("session-newer").path;
@@ -536,7 +539,7 @@ fn workspace_session(root: &Path) -> Session {
 }
 
 fn run_claw_with_env(current_dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_claw"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_nova"));
     command.current_dir(current_dir).args(args);
     for (key, value) in envs {
         command.env(key, value);

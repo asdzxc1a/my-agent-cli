@@ -1,0 +1,59 @@
+{
+  "project_title": "The Kill List",
+  "total_budget": 2500000,
+  "currency": "USD",
+  "categories": {
+    "above_the_line": 450000,
+    "production": 1200000,
+    "post_production": 350000,
+    "miscellaneous": 500000
+  },
+  "contingency": 0.15,
+  "burn_rate_per_week": 125000,
+  "shooting_days": 28,
+  "risk_flags": [
+    "vfx_heavy_third_act",
+    "eur_co_production_required"
+  ],
+  "breakdown": {
+    "above_the_line": {
+      "writer": 75000,
+      "director": 100000,
+      "producer_fees": 150000,
+      "lead_cast": 125000
+    },
+    "production": {
+      "crew_salaries": 480000,
+      "location_fees": 180000,
+      "camera_and_grip": 150000,
+      "art_department": 140000,
+      "wardrobe_and_makeup": 100000,
+      "transportation": 100000,
+      "catering": 50000
+    },
+    "post_production": {
+      "editorial": 100000,
+      "sound_design": 80000,
+      "vfx": 120000,
+      "color_and_deliverables": 50000
+    },
+    "miscellaneous": {
+      "insurance": 80000,
+      "legal": 60000,
+      "festival_and_marketing": 120000,
+      "contingency_reserve": 240000
+    }
+  },
+  "financing_plan": {
+    "german_tax_incentive": 0.2,
+    "private_equity": 0.4,
+    "gap_financing": 0.25,
+    "producer_equity": 0.15
+  },
+  "notes": [
+    "Budget assumes Berlin-based shoot with local crew.",
+    "Lead cast fees are placeholders pending attachment.",
+    "VFX costs concentrated in final 8 minutes (safe-house explosion + data wipe sequence).",
+    "German federal subsidy (FFA) and regional rebates (Medienboard Berlin-Brandenburg) targeted."
+  ]
+}
