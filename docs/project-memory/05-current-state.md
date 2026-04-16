@@ -1,84 +1,96 @@
-# Current State: What Has Been Done
+# Current State: Nova Producer OS
 
-## Completed Work
+**Last updated:** 2026-04-15 (End of Day — Phase 5 Complete)  
+**Current branch:** `main` on `asdzxc1a/my-agent-cli`  
+**Last commit:** `02fdb38` — `feat(producer): Phase 5 — Cannes demo hardening, animated progress bars, test regression fixes, and demo workspace finalization`
 
-### 1. Fork & Rebrand (DONE)
-- **Forked:** `ultraworkers/claw-code` → `asdzxc1a/my-agent-cli`
-- **Rebranded:**
-  - `Claw Code` → `Nova`
-  - `rusty-claude-cli` crate → `nova-cli`
-  - Binary `claw` → `nova`
-  - Repo refs `ultraworkers/claw-code` → `asdzxc1a/my-agent-cli`
-  - `claw-code` → `my-agent-cli`
-  - `assets/claw-hero.jpeg` → `assets/nova-hero.jpeg`
-- **Cleaned:** Removed tracked `.claude/sessions/`, `.claw/sessions/`, `.clawd-todos.json`
-- **Verified:** `cargo check --workspace` passes
-- **Committed & Pushed:** Commit `8f7dddc` on `main`
+---
 
-### 2. Research Synthesis (DONE)
-Analyzed 7 research documents covering:
-- Cannes Film Festival strategy and producer pain points
-- Village Innovation competitive landscape
-- 50 producer archetypes
-- "The Kill List" tool audit
-- LinkedIn optimization for Cannes Next AI for Talent Summit
+## What Is Done (Phases 0-5 Complete)
 
-### 3. Architecture Exploration (DONE)
-Deep-dive into codebase architecture completed via 4 concurrent explore agents:
-- Subagent spawning mechanism (`tools/src/lib.rs`)
-- Command/plugin surface (`commands/src/lib.rs`, `plugins/src/lib.rs`, `nova-cli/src/main.rs`)
-- Test harness patterns (`mock_parity_harness.rs`, `mock-anthropic-service`)
-- Runtime session/tool dispatch (`runtime/src/conversation.rs`, `permissions.rs`, `file_ops.rs`, `mcp_*.rs`)
+### Phase 0: Domain Model ✅
+- **Files:** `rust/crates/runtime/src/producer/{workspace,run,artifact,decision_engine,agent_prompts,approval,mod}.rs`
+- Typed workspace, stage state machine (`ProducerStage`, `StageStatus`), run/step tracking, artifact versioning, decision engine (`suggest_next_action()`), 7 agent archetypes, approval gates.
+- **Tests:** `runtime/tests/producer_domain_tests.rs` — 7 tests passing.
 
-### 4. Plan Approved (DONE)
-The user approved the comprehensive 5-phase, 16-day plan for building the Nova Producer OS with:
-- Workspace-scoped stage-based architecture
-- 7-agent virtual crew
-- CLI-native dashboard and decision engine
-- Test-driven development
-- Cannes demo hardening
+### Phase 1: Workspace Commands & Dashboard ✅
+- **Files:** `rust/crates/commands/src/lib.rs`, `rust/crates/nova-cli/src/main.rs`
+- Commands: `/workspaces`, `/workspace <name>`, `/dashboard`, `/artifacts`, `/stage [name]`, `/run <args>`
+- Workspace scaffolding under `.nova/workspaces/<name>/`, color-coded dashboard with stage progress bar and next-action suggestion.
 
-## Current Git Status
+### Phase 2: Slate Stage Run ✅
+- **Files:** `rust/crates/tools/src/producer_plugin.rs`, `rust/crates/tools/src/lib.rs`
+- Tool: `ProducerSlateAnalyze`
+- Spawns Script Analyst + Budget Oracle in parallel, synthesizes `SLATE_REPORT.md`, unlocks Package stage.
+- **Tests:** `tools/tests/producer_slate_e2e.rs` — 1 test passing.
 
-The `main` branch is clean and pushed. The next commit will introduce the producer domain model.
+### Phase 3: Full 7-Agent Stage Registry ✅
+- **Tools:** `ProducerPackageBuild`, `ProducerFinanceModel`, `ProducerComplyScan`, `ProducerLaunchStrategy`
+- All 5 stages runnable sequentially. Each spawns correct agents, synthesizes artifacts, unlocks next stage.
+- **Artifacts:** Slate→`SLATE_REPORT.md`, Package→`PITCH_DECK.md`, Finance→`BUDGET_MODEL.json`, Comply→`COMPLIANCE_REPORT.md`, Launch→`FESTIVAL_STRATEGY.md`
+- **Tests:** `tools/tests/producer_pipeline_e2e.rs` — full 5-stage run passing.
 
-## Next Immediate Actions (Phase 0)
+### Phase 4: Approval Gates & Failure Recovery ✅
+- **Files:** `rust/crates/runtime/src/producer/approval.rs`, `rust/crates/commands/src/lib.rs`, `rust/crates/nova-cli/src/main.rs`
+- `ApprovalRequest`/`ApprovalStatus` in domain model, `/approvals` command, compliance scan creates approval on high-risk findings and blocks run.
+- **Tests:** `tools/tests/producer_approval_e2e.rs` — 2 tests passing.
 
-1. Create `rust/crates/runtime/src/producer/` directory
-2. Create domain model files:
-   - `workspace.rs` — `ProducerWorkspace`, `ProducerStage`, `StageState`, `StageStatus`
-   - `run.rs` — `ProducerRun`, `RunStep`, `RunStatus`, `StepStatus`
-   - `artifact.rs` — `ProducerArtifact`, `ArtifactVersion`
-   - `decision_engine.rs` — `suggest_next_action()`, `NextAction`
-   - `agent_prompts.rs` — `AgentArchetype` enum
-   - `mod.rs` — module exports
-3. Wire `pub mod producer;` into `runtime/src/lib.rs`
-4. Create `runtime/tests/producer_domain_tests.rs` with 3 initial tests
-5. Run `cargo test -p runtime producer_domain_tests` until green
-6. Commit as `feat(runtime): add producer domain model for Nova OS`
+### Phase 5: Cannes Demo Hardening ✅
+- **Animated progress bars** in `/run` (`producer_plugin.rs`):
+  - Real-time agent completion tracker with spinner and filled bar
+  - Per-agent completion checkmarks
+  - Animated synthesis progress bar during artifact generation
+- **Demo workspace** (`examples/cannes-demo-workspace/`) pre-staged with:
+  - `SLATE_REPORT.md` — realistic "The Kill List" thriller analysis
+  - `PITCH_DECK.md` — visual thesis, casting direction, locations
+  - `BUDGET_MODEL.json` — $2.5M detailed budget breakdown
+- **`NOVA_DEMO_MODE`** env var reduces agent sleep from 100ms → 10ms for fast demos
+- **Test regression fixes:**
+  - `CARGO_BIN_EXE_claw` → `CARGO_BIN_EXE_nova` in all nova-cli integration tests
+  - Slash command count 139 → 146
+  - macOS `/private/var` symlink mismatch in `resume_slash_commands.rs` resolved
+
+---
+
+## Build & Test Status
+
+- `cargo check --workspace` ✅ clean
+- `cargo build -p nova-cli` ✅ builds successfully
+- `cargo test --workspace` ✅ **all tests passing** (no failures)
+- **Producer-specific tests (11/11 passing):**
+  - `cargo test -p runtime --test producer_domain_tests`
+  - `cargo test -p tools --test producer_slate_e2e`
+  - `cargo test -p tools --test producer_pipeline_e2e`
+  - `cargo test -p tools --test producer_approval_e2e`
+
+---
+
+## Repository State
+
+- **Remote:** `https://github.com/asdzxc1a/my-agent-cli.git`
+- **Branch:** `main`
+- **Status:** Clean, all changes committed and pushed
+- **Commit count on main:** 6 producer-related commits
+
+---
+
+## Key Files for Tomorrow
+
+| Purpose | Path |
+|---------|------|
+| Domain model | `rust/crates/runtime/src/producer/` |
+| Stage run logic | `rust/crates/tools/src/producer_plugin.rs` |
+| Commands | `rust/crates/commands/src/lib.rs` |
+| CLI dispatch | `rust/crates/nova-cli/src/main.rs` |
+| Tests | `rust/crates/runtime/tests/producer_domain_tests.rs` |
+| | `rust/crates/tools/tests/producer_slate_e2e.rs` |
+| | `rust/crates/tools/tests/producer_pipeline_e2e.rs` |
+| | `rust/crates/tools/tests/producer_approval_e2e.rs` |
+| Demo workspace | `examples/cannes-demo-workspace/` |
+| Demo script | `docs/cannes-demo.md` |
+
+---
 
 ## Blockers
 
-**None.** The codebase compiles, tests infrastructure exists, and the plan is approved.
-
-## Files That Must Be Read on Restart
-
-If context is cleared, these files contain all necessary information:
-
-1. `docs/project-memory/00-project-overview.md`
-2. `docs/project-memory/01-user-context.md`
-3. `docs/project-memory/02-research-synthesis.md`
-4. `docs/project-memory/03-approved-plan.md`
-5. `docs/project-memory/04-architecture-notes.md`
-6. `docs/project-memory/05-current-state.md` (this file)
-7. `docs/project-memory/06-cook-pattern-reference.md`
-8. `docs/project-memory/07-7-agent-crew-spec.md`
-
-Additionally, read these source files for implementation details:
-- `rust/crates/runtime/src/lib.rs`
-- `rust/crates/runtime/src/task_registry.rs`
-- `rust/crates/runtime/src/session.rs`
-- `rust/crates/tools/src/lib.rs` (agent spawning)
-- `rust/crates/commands/src/lib.rs`
-- `rust/crates/nova-cli/src/main.rs`
-- `rust/crates/plugins/src/lib.rs`
+**None.** The project compiles, all tests pass, and the branch is clean.

@@ -1,6 +1,6 @@
 # Implementation Log: Nova Producer OS
 
-## Current State (as of 2026-04-15)
+## Current State (as of 2026-04-15 — End of Day)
 
 All core producer functionality through **Phase 5 is implemented, tested, committed, and pushed** to `main` on `asdzxc1a/my-agent-cli`.
 
@@ -10,10 +10,10 @@ All core producer functionality through **Phase 5 is implemented, tested, commit
 3. `0ef83d8` — feat(producer): Phase 0-2 — domain model, workspace commands, dashboard, and slate run
 4. `0106b24` — feat(producer): Phase 3 — full 7-agent stage registry with all 5 stages
 5. `7aed800` — feat(producer): Phase 4 — approval gates and failure recovery
-6. `TBD` — feat(producer): Phase 5 — Cannes demo hardening, test regression fixes, animated progress bars
+6. **`02fdb38`** — feat(producer): Phase 5 — Cannes demo hardening, animated progress bars, test regression fixes, and demo workspace finalization
 
 ### Phase 0: Domain Model
-- **Files:** `rust/crates/runtime/src/producer/{workspace,run,artifact,decision_engine,agent_prompts,mod}.rs`
+- **Files:** `rust/crates/runtime/src/producer/{workspace,run,artifact,decision_engine,agent_prompts,approval,mod}.rs`
 - **What it does:** Typed workspace, stage state machine, run/step tracking, artifact versioning, decision engine (`suggest_next_action()`), and all 7 agent archetypes.
 - **Tests:** `runtime/tests/producer_domain_tests.rs` — 7 tests green.
 
@@ -87,3 +87,4 @@ All core producer functionality through **Phase 5 is implemented, tested, commit
 | | `rust/crates/tools/tests/producer_approval_e2e.rs` |
 | Demo workspace | `examples/cannes-demo-workspace/` |
 | Demo script | `docs/cannes-demo.md` |
+| Handoff for tomorrow | `docs/project-memory/10-session-handoff.md` |
