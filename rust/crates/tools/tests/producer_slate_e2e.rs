@@ -18,7 +18,8 @@ fn slate_run_creates_artifacts_and_unlocks_package() {
     // Step 2: Run slate analysis
     let input = serde_json::json!({
         "workspace_name": "test-film",
-        "slate_file": "projects.csv",
+        "run_type": "slate_analyze",
+        "file": "projects.csv",
         "cwd": root.display().to_string(),
     });
     let result = tools::execute_tool("ProducerSlateAnalyze", &input)

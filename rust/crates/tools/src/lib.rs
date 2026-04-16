@@ -1186,6 +1186,70 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::WorkspaceWrite,
         },
         ToolSpec {
+            name: "ProducerPackageBuild",
+            description: "Run a Package build on a producer workspace.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "workspace_name": { "type": "string" },
+                    "run_type": { "type": "string" },
+                    "file": { "type": "string" },
+                    "cwd": { "type": "string" }
+                },
+                "required": ["workspace_name", "run_type", "cwd"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "ProducerFinanceModel",
+            description: "Run a Finance model on a producer workspace.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "workspace_name": { "type": "string" },
+                    "run_type": { "type": "string" },
+                    "file": { "type": "string" },
+                    "cwd": { "type": "string" }
+                },
+                "required": ["workspace_name", "run_type", "cwd"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "ProducerComplyScan",
+            description: "Run a Compliance scan on a producer workspace.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "workspace_name": { "type": "string" },
+                    "run_type": { "type": "string" },
+                    "file": { "type": "string" },
+                    "cwd": { "type": "string" }
+                },
+                "required": ["workspace_name", "run_type", "cwd"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "ProducerLaunchStrategy",
+            description: "Run a Launch strategy on a producer workspace.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "workspace_name": { "type": "string" },
+                    "run_type": { "type": "string" },
+                    "file": { "type": "string" },
+                    "cwd": { "type": "string" }
+                },
+                "required": ["workspace_name", "run_type", "cwd"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
             name: "ProducerRunStatus",
             description: "Check the status of a producer run.",
             input_schema: json!({
@@ -1319,6 +1383,10 @@ fn execute_tool_with_enforcer(
             from_value::<TestingPermissionInput>(input).and_then(run_testing_permission)
         }
         "ProducerSlateAnalyze" => producer_plugin::run_slate_analyze(input),
+        "ProducerPackageBuild" => producer_plugin::run_package_build(input),
+        "ProducerFinanceModel" => producer_plugin::run_finance_model(input),
+        "ProducerComplyScan" => producer_plugin::run_comply_scan(input),
+        "ProducerLaunchStrategy" => producer_plugin::run_launch_strategy(input),
         "ProducerRunStatus" => producer_plugin::run_status(input),
         _ => Err(format!("unsupported tool: {name}")),
     }

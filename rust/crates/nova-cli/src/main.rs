@@ -4093,25 +4093,40 @@ impl LiveCli {
         }
 
         let tokens: Vec<&str> = cmd.split_whitespace().collect();
-        if tokens.len() >= 3 && tokens[0] == "slate" && tokens[1] == "analyze" {
-            let slate_file = tokens.get(2).and_then(|t| t.strip_prefix("--slate=")).or_else(|| {
-                tokens.iter().position(|&t| t == "--slate").and_then(|i| tokens.get(i + 1).copied())
-            });
-            let input = serde_json::json!({
-                "workspace_name": workspace,
-                "slate_file": slate_file,
-                "cwd": cwd.display().to_string(),
-            });
-            println!("Starting Slate analysis for workspace '{}'...", workspace);
-            match tools::execute_tool("ProducerSlateAnalyze", &input) {
-                Ok(result) => println!("{result}"),
-                Err(error) => eprintln!("error: {error}"),
-            }
+        if tokens.len() < 2 {
+            println!("Usage: /run <stage> <command> [--file <path>]");
             return;
         }
 
-        println!("Starting producer run: {cmd}");
-        println!("(Use `/run slate analyze --slate <file>` for Slate stage)");
+        let stage = tokens[0];
+        let subcmd = tokens[1];
+        let file = tokens.iter().position(|&t| t == "--file" || t == "--slate" || t == "--script" || t == "--project")
+            .and_then(|i| tokens.get(i + 1).copied());
+
+        let (tool_name, label) = match (stage, subcmd) {
+            ("slate", "analyze") => ("ProducerSlateAnalyze", "Slate analysis"),
+            ("package", "build") => ("ProducerPackageBuild", "Package build"),
+            ("finance", "model") => ("ProducerFinanceModel", "Finance model"),
+            ("comply", "scan") => ("ProducerComplyScan", "Compliance scan"),
+            ("launch", "strategy") => ("ProducerLaunchStrategy", "Launch strategy"),
+            _ => {
+                println!("Unknown run command: {cmd}");
+                println!("Supported: slate analyze, package build, finance model, comply scan, launch strategy");
+                return;
+            }
+        };
+
+        let input = serde_json::json!({
+            "workspace_name": workspace,
+            "run_type": format!("{stage}_{subcmd}"),
+            "file": file,
+            "cwd": cwd.display().to_string(),
+        });
+        println!("Starting {label} for workspace '{workspace}'...");
+        match tools::execute_tool(tool_name, &input) {
+            Ok(result) => println!("{result}"),
+            Err(error) => eprintln!("error: {error}"),
+        }
     }
 
     fn persist_session(&self) -> Result<(), Box<dyn std::error::Error>> {
