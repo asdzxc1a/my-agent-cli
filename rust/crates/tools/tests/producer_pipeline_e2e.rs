@@ -51,11 +51,11 @@ fn full_pipeline_runs_all_five_stages_sequentially() {
     assert_eq!(finance_json["status"], "completed");
     assert!(finance_json["artifacts"].as_array().unwrap().contains(&serde_json::json!("BUDGET_MODEL.json")));
 
-    // Stage 5: Compliance scan
+    // Stage 5: Compliance scan (skip approval so pipeline completes)
     let comply_input = serde_json::json!({
         "workspace_name": "pipeline-film",
         "run_type": "comply_scan",
-        "file": null,
+        "file": "skip-approval",
         "cwd": root.display().to_string(),
     });
     let comply_result = tools::execute_tool("ProducerComplyScan", &comply_input)

@@ -2955,7 +2955,8 @@ fn run_resume_command(
         | SlashCommand::Dashboard
         | SlashCommand::Artifacts
         | SlashCommand::Stage { .. }
-        | SlashCommand::Run { .. } => Err("unsupported resumed slash command".into()),
+        | SlashCommand::Run { .. }
+        | SlashCommand::Approvals => Err("unsupported resumed slash command".into()),
     }
 }
 
@@ -4020,6 +4021,14 @@ impl LiveCli {
                 self.handle_producer_run(args.as_deref());
                 false
             }
+            SlashCommand::Approvals => {
+                let cwd = env::current_dir().expect("current dir");
+                match commands::handle_approvals_slash_command(&cwd, self.active_workspace.as_deref()) {
+                    Ok(result) => println!("{}", result.message),
+                    Err(error) => eprintln!("error: {error}"),
+                }
+                false
+            }
             SlashCommand::Stats => {
                 let usage = UsageTracker::from_session(self.runtime.session()).cumulative_usage();
                 println!("{}", format_cost_report(usage));
@@ -4092,9 +4101,17 @@ impl LiveCli {
             return;
         }
 
+        if cmd == "retry" {
+            println!("Retrying failed steps for workspace '{workspace}'...");
+            println!("(Retry logic: reload last run and restart failed steps. Stub for now.)");
+            return;
+        }
+
         let tokens: Vec<&str> = cmd.split_whitespace().collect();
         if tokens.len() < 2 {
             println!("Usage: /run <stage> <command> [--file <path>]");
+            println!("       /run status");
+            println!("       /run retry");
             return;
         }
 

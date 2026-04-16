@@ -1076,6 +1076,13 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         argument_hint: Some("<args>"),
         resume_supported: false,
     },
+    SlashCommandSpec {
+        name: "approvals",
+        aliases: &[],
+        summary: "List pending producer approvals",
+        argument_hint: None,
+        resume_supported: true,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1233,6 +1240,7 @@ pub enum SlashCommand {
     Run {
         args: Option<String>,
     },
+    Approvals,
     Unknown(String),
 }
 
@@ -1340,6 +1348,7 @@ impl SlashCommand {
             Self::Artifacts => "/artifacts",
             Self::Stage { .. } => "/stage",
             Self::Run { .. } => "/run",
+            Self::Approvals => "/approvals",
             #[allow(unreachable_patterns)]
             _ => "/unknown",
         }
@@ -1570,6 +1579,10 @@ pub fn validate_slash_command_input(
             stage: parse_stage_name(&args)?,
         },
         "run" => SlashCommand::Run { args: remainder },
+        "approvals" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Approvals
+        }
         other => SlashCommand::Unknown(other.to_string()),
     }))
 }
@@ -4210,7 +4223,8 @@ pub fn handle_slash_command(
         | SlashCommand::Dashboard
         | SlashCommand::Artifacts
         | SlashCommand::Stage { .. }
-        | SlashCommand::Run { .. } => None,
+        | SlashCommand::Run { .. }
+        | SlashCommand::Approvals => None,
     }
 }
 
@@ -4336,6 +4350,36 @@ pub fn handle_artifacts_slash_command(cwd: &Path, workspace_name: Option<&str>) 
         "No artifacts yet. Run a stage to generate artifacts.".to_string()
     } else {
         format!("Artifacts:\n{}", files.iter().map(|f| format!("  • {f}")).collect::<Vec<_>>().join("\n"))
+    };
+    Ok(ProducerCommandResult { message, reload_runtime: false })
+}
+
+/// List pending approvals in the current workspace.
+pub fn handle_approvals_slash_command(cwd: &Path, workspace_name: Option<&str>) -> std::io::Result<ProducerCommandResult> {
+    let ws_name = workspace_name.unwrap_or("default");
+    let approvals_dir = cwd.join(".nova").join("workspaces").join(ws_name).join("approvals");
+    let mut pending = Vec::new();
+    if approvals_dir.is_dir() {
+        for entry in fs::read_dir(&approvals_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                let content = fs::read_to_string(entry.path()).unwrap_or_default();
+                if let Ok(approval) = serde_json::from_str::<runtime::producer::ApprovalRequest>(&content) {
+                    if approval.status == runtime::producer::ApprovalStatus::Requested {
+                        pending.push(format!(
+                            "  [{}] {} — {} (Run: {})",
+                            approval.approval_id, approval.agent_name, approval.risk_summary, approval.run_id
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    pending.sort();
+    let message = if pending.is_empty() {
+        "No pending approvals.".to_string()
+    } else {
+        format!("Pending Approvals:\n{}", pending.join("\n"))
     };
     Ok(ProducerCommandResult { message, reload_runtime: false })
 }

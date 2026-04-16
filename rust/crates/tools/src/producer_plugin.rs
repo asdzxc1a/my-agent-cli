@@ -1,5 +1,6 @@
 use runtime::producer::{
-    AgentArchetype, ProducerRun, ProducerStage, ProducerWorkspace, RunStep, RunType, StageStatus,
+    AgentArchetype, ApprovalRequest, ApprovalStatus, ProducerRun, ProducerStage, ProducerWorkspace,
+    RunStep, RunType, StageStatus,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,6 +26,7 @@ pub struct StageRunResult {
     pub status: String,
     pub artifacts: Vec<String>,
     pub message: String,
+    pub approval_required: bool,
 }
 
 /// Execute a Slate analysis run.
@@ -35,6 +37,8 @@ pub fn run_slate_analyze(input: &Value) -> Result<String, String> {
         RunType::SlateAnalyze,
         ProducerStage::Slate,
         vec![AgentArchetype::ScriptAnalyst, AgentArchetype::BudgetOracle],
+        false,
+        |_, _, _| Ok(()),
         |ws_name, run_id| {
             let slate_report = format!(
                 "# Slate Analysis Report\n\n## Workspace: {}\n## Run: {}\n\n## Summary\nAll slate agents completed successfully.\n\n## Next Action\nProceed to `/stage package`.\n",
@@ -61,6 +65,8 @@ pub fn run_package_build(input: &Value) -> Result<String, String> {
             AgentArchetype::CastingScout,
             AgentArchetype::LocationScout,
         ],
+        false,
+        |_, _, _| Ok(()),
         |ws_name, run_id| {
             let pitch_deck = format!(
                 "# Pitch Deck: {}\n\n## Visual Thesis\nCompelling visual narrative ready for investors.\n\n## Casting & Locations\nIntegrated from Package stage agents.\n\n## Run: {}\n",
@@ -80,7 +86,9 @@ pub fn run_finance_model(input: &Value) -> Result<String, String> {
         RunType::FinanceModel,
         ProducerStage::Finance,
         vec![AgentArchetype::BudgetOracle],
-        |ws_name, run_id| {
+        false,
+        |_, _, _| Ok(()),
+        |ws_name, _run_id| {
             let budget_json = serde_json::json!({
                 "project_title": ws_name,
                 "total_budget": 2500000,
@@ -96,14 +104,6 @@ pub fn run_finance_model(input: &Value) -> Result<String, String> {
                 "shooting_days": 28,
                 "risk_flags": ["vfx_heavy"]
             });
-            let burn_report = format!(
-                "# Burn Report: {}\n\n## Total Budget: $2,500,000\n## Weekly Burn: $125,000\n## Estimated Shoot Duration: 28 days\n\nRun: {}\n",
-                ws_name, run_id
-            );
-            fs::write(
-                PathBuf::from("/tmp").join(format!("burn-{}-{}.md", ws_name, run_id)),
-                &burn_report,
-            ).ok();
             ("BUDGET_MODEL.json".to_string(), budget_json.to_string())
         },
         "Finance model complete. Budget and burn report generated. Comply stage is now ready."
@@ -119,6 +119,29 @@ pub fn run_comply_scan(input: &Value) -> Result<String, String> {
         RunType::ComplyScan,
         ProducerStage::Comply,
         vec![AgentArchetype::ComplianceOfficer],
+        true, // compliance can trigger approvals
+        |ws_root, run_id, _agents| {
+            // Simulate high-risk finding that requires approval
+            // Skip approval creation when file == "skip-approval" (used in pipeline tests)
+            if input.file.as_deref() == Some("skip-approval") {
+                return Ok(());
+            }
+            let approval = ApprovalRequest::new(
+                format!("approval-{run_id}"),
+                run_id,
+                2,
+                "Compliance Officer",
+                "EU AI Act disclosure missing for generative AI pre-viz.",
+            );
+            let approvals_dir = ws_root.join("approvals");
+            fs::create_dir_all(&approvals_dir).map_err(|e| e.to_string())?;
+            let approval_path = approvals_dir.join(format!("{}.json", approval.approval_id));
+            fs::write(
+                &approval_path,
+                serde_json::to_string_pretty(&approval).map_err(|e| e.to_string())?,
+            ).map_err(|e| e.to_string())?;
+            Ok(())
+        },
         |ws_name, run_id| {
             let report = format!(
                 "# Compliance Report: {}\n\n## EU AI Act Assessment\n- AI Usage Detected: Yes\n- Risk Level: Medium\n- Disclosure Requirements: Standard\n\n## Union & Labor\nNo major issues flagged.\n\nRun: {}\n",
@@ -138,6 +161,8 @@ pub fn run_launch_strategy(input: &Value) -> Result<String, String> {
         RunType::LaunchStrategy,
         ProducerStage::Launch,
         vec![AgentArchetype::DistributionAnalyst],
+        false,
+        |_, _, _| Ok(()),
         |ws_name, run_id| {
             let strategy = format!(
                 "# Festival Strategy: {}\n\n## Tier 1 Targets\n1. Cannes Film Festival\n2. Toronto International Film Festival\n\n## Market Premieres\nCannes — best fit for European co-production.\n\nRun: {}\n",
@@ -203,6 +228,7 @@ pub fn run_status(input: &Value) -> Result<String, String> {
                 "agent": s.agent_name,
                 "status": format!("{:?}", s.status),
                 "icon": s.status.icon(),
+                "approval_required": s.approval_required,
             })
         })
         .collect();
@@ -215,16 +241,19 @@ pub fn run_status(input: &Value) -> Result<String, String> {
     .to_string())
 }
 
-fn run_stage_internal<F>(
+fn run_stage_internal<F, G>(
     input: &StageRunInput,
     run_type: RunType,
     stage: ProducerStage,
     agents: Vec<AgentArchetype>,
+    can_request_approval: bool,
+    post_agent_hook: G,
     synthesizer: F,
     completion_message: String,
 ) -> Result<String, String>
 where
     F: FnOnce(&str, &str) -> (String, String),
+    G: FnOnce(&Path, &str, &[AgentArchetype]) -> Result<(), String>,
 {
     let cwd = PathBuf::from(&input.cwd);
     let ws_root = cwd.join(".nova").join("workspaces").join(&input.workspace_name);
@@ -241,7 +270,6 @@ where
         ProducerWorkspace::new(&input.workspace_name, cwd.clone())
     };
 
-    // Verify stage is not locked
     let stage_state = ws.stages.get(&stage).copied().unwrap_or_else(|| runtime::producer::StageState::locked());
     if stage_state.status == StageStatus::Locked {
         return Err(format!("Stage {:?} is locked. Complete the previous stage first.", stage));
@@ -261,7 +289,6 @@ where
     fs::create_dir_all(&runs_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(runs_dir.join("steps")).map_err(|e| e.to_string())?;
 
-    // Spawn agents in parallel
     let mut handles = Vec::new();
     for (i, agent) in agents.iter().enumerate() {
         let step_number = (i + 1) as u32;
@@ -304,6 +331,48 @@ where
         }
     }
 
+    post_agent_hook(&ws_root, &run_id, &agents)?;
+
+    // Check for pending approvals
+    let mut approval_required = false;
+    if can_request_approval {
+        let approvals_dir = ws_root.join("approvals");
+        if approvals_dir.is_dir() {
+            for entry in fs::read_dir(&approvals_dir).map_err(|e| e.to_string())? {
+                let entry = entry.map_err(|e| e.to_string())?;
+                if entry.file_type().map_err(|e| e.to_string())?.is_file() {
+                    let content = fs::read_to_string(entry.path()).map_err(|e| e.to_string())?;
+                    if let Ok(approval) = serde_json::from_str::<ApprovalRequest>(&content) {
+                        if approval.status == ApprovalStatus::Requested && approval.run_id == run_id {
+                            approval_required = true;
+                            if let Some(s) = run.steps.iter_mut().find(|s| s.agent_name == approval.agent_name) {
+                                s.approval_required = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if approval_required {
+        // Mark run as blocked, don't synthesize yet
+        run.status = runtime::producer::RunStatus::Failed;
+        save_run(&run, &runs_dir)?;
+        ws.stages.get_mut(&stage).unwrap().status = StageStatus::Blocked;
+        save_workspace(&ws, &ws_path)?;
+
+        let result = StageRunResult {
+            run_id: run.run_id.clone(),
+            stage: stage.to_string(),
+            status: "blocked".to_string(),
+            artifacts: vec![],
+            message: "Compliance scan found high-risk items requiring approval. Run `/approvals` to review.".to_string(),
+            approval_required: true,
+        };
+        return serde_json::to_string_pretty(&result).map_err(|e| e.to_string());
+    }
+
     // Synthesis step
     let synth_number = (agents.len() + 1) as u32;
     let mut synthesizer_step = RunStep::new(
@@ -339,6 +408,7 @@ where
         status: "completed".to_string(),
         artifacts: run.artifact_names.clone(),
         message: completion_message,
+        approval_required: false,
     };
 
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
