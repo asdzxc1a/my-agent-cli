@@ -1034,6 +1034,48 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         argument_hint: None,
         resume_supported: true,
     },
+    SlashCommandSpec {
+        name: "workspaces",
+        aliases: &[],
+        summary: "List producer workspaces",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "workspace",
+        aliases: &[],
+        summary: "Switch or create a producer workspace",
+        argument_hint: Some("<name>"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "dashboard",
+        aliases: &[],
+        summary: "Show workspace dashboard",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "artifacts",
+        aliases: &[],
+        summary: "Browse workspace artifacts",
+        argument_hint: None,
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "stage",
+        aliases: &[],
+        summary: "Enter a producer stage",
+        argument_hint: Some("[slate|package|finance|comply|launch]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
+        name: "run",
+        aliases: &[],
+        summary: "Execute a producer stage run",
+        argument_hint: Some("<args>"),
+        resume_supported: false,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1179,6 +1221,18 @@ pub enum SlashCommand {
     History {
         count: Option<String>,
     },
+    Workspaces,
+    Workspace {
+        name: Option<String>,
+    },
+    Dashboard,
+    Artifacts,
+    Stage {
+        stage: Option<String>,
+    },
+    Run {
+        args: Option<String>,
+    },
     Unknown(String),
 }
 
@@ -1280,6 +1334,12 @@ impl SlashCommand {
             Self::Sandbox => "/sandbox",
             Self::Mcp { .. } => "/mcp",
             Self::Export { .. } => "/export",
+            Self::Workspaces => "/workspaces",
+            Self::Workspace { .. } => "/workspace",
+            Self::Dashboard => "/dashboard",
+            Self::Artifacts => "/artifacts",
+            Self::Stage { .. } => "/stage",
+            Self::Run { .. } => "/run",
             #[allow(unreachable_patterns)]
             _ => "/unknown",
         }
@@ -1491,6 +1551,25 @@ pub fn validate_slash_command_input(
         "history" => SlashCommand::History {
             count: optional_single_arg(command, &args, "[count]")?,
         },
+        "workspaces" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Workspaces
+        }
+        "workspace" => SlashCommand::Workspace {
+            name: optional_single_arg(command, &args, "<name>")?,
+        },
+        "dashboard" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Dashboard
+        }
+        "artifacts" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Artifacts
+        }
+        "stage" => SlashCommand::Stage {
+            stage: parse_stage_name(&args)?,
+        },
+        "run" => SlashCommand::Run { args: remainder },
         other => SlashCommand::Unknown(other.to_string()),
     }))
 }
@@ -1562,6 +1641,21 @@ fn parse_clear_args(args: &[&str]) -> Result<bool, SlashCommandParseError> {
         )),
         _ => Err(usage_error("clear", "[--confirm]")),
     }
+}
+
+fn parse_stage_name(args: &[&str]) -> Result<Option<String>, SlashCommandParseError> {
+    let stage = optional_single_arg("stage", args, "[slate|package|finance|comply|launch]")?;
+    if let Some(ref stage) = stage {
+        if matches!(stage.as_str(), "slate" | "package" | "finance" | "comply" | "launch") {
+            return Ok(Some(stage.clone()));
+        }
+        return Err(command_error(
+            &format!("Unsupported stage '{stage}'. Use slate, package, finance, comply, or launch."),
+            "stage",
+            "/stage [slate|package|finance|comply|launch]",
+        ));
+    }
+    Ok(None)
 }
 
 fn parse_config_section(args: &[&str]) -> Result<Option<String>, SlashCommandParseError> {
@@ -4111,7 +4205,153 @@ pub fn handle_slash_command(
         | SlashCommand::AddDir { .. }
         | SlashCommand::History { .. }
         | SlashCommand::Unknown(_) => None,
+        | SlashCommand::Workspaces
+        | SlashCommand::Workspace { .. }
+        | SlashCommand::Dashboard
+        | SlashCommand::Artifacts
+        | SlashCommand::Stage { .. }
+        | SlashCommand::Run { .. } => None,
     }
+}
+
+// Producer OS command handlers
+
+#[derive(Debug, Clone)]
+pub struct ProducerCommandResult {
+    pub message: String,
+    pub reload_runtime: bool,
+}
+
+/// List all producer workspaces in `.nova/workspaces/`.
+pub fn handle_workspaces_slash_command(cwd: &Path) -> std::io::Result<ProducerCommandResult> {
+    let workspaces_dir = cwd.join(".nova").join("workspaces");
+    let mut entries = Vec::new();
+    if workspaces_dir.is_dir() {
+        for entry in fs::read_dir(&workspaces_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                entries.push(name);
+            }
+        }
+    }
+    entries.sort();
+    let message = if entries.is_empty() {
+        "No workspaces found. Create one with `/workspace create <name>`.".to_string()
+    } else {
+        format!("Workspaces:\n{}", entries.iter().map(|e| format!("  • {e}")).collect::<Vec<_>>().join("\n"))
+    };
+    Ok(ProducerCommandResult { message, reload_runtime: false })
+}
+
+/// Switch to or create a producer workspace.
+pub fn handle_workspace_slash_command(
+    name: Option<&str>,
+    cwd: &Path,
+) -> std::io::Result<ProducerCommandResult> {
+    let Some(name) = name else {
+        return Ok(ProducerCommandResult {
+            message: "Usage: /workspace <name>".to_string(),
+            reload_runtime: false,
+        });
+    };
+    let workspace_root = cwd.join(".nova").join("workspaces").join(name);
+    if !workspace_root.exists() {
+        fs::create_dir_all(&workspace_root)?;
+        fs::create_dir_all(workspace_root.join("artifacts"))?;
+        fs::create_dir_all(workspace_root.join("runs"))?;
+        fs::create_dir_all(workspace_root.join("approvals"))?;
+        let ws = runtime::producer::ProducerWorkspace::new(name, cwd.to_path_buf());
+        let ws_json = serde_json::to_string_pretty(&ws).unwrap_or_default();
+        fs::write(workspace_root.join("workspace.json"), ws_json)?;
+        let stage_state = serde_json::json!({
+            "stages": {
+                "slate": "ready",
+                "package": "locked",
+                "finance": "locked",
+                "comply": "locked",
+                "launch": "locked",
+            }
+        });
+        fs::write(workspace_root.join("stage_state.json"), stage_state.to_string())?;
+        return Ok(ProducerCommandResult {
+            message: format!("Created workspace '{name}'.\nRun `/dashboard` to see what's next."),
+            reload_runtime: true,
+        });
+    }
+    Ok(ProducerCommandResult {
+        message: format!("Switched to workspace '{name}'."),
+        reload_runtime: true,
+    })
+}
+
+/// Render the workspace dashboard as text.
+pub fn handle_dashboard_slash_command(cwd: &Path, workspace_name: Option<&str>) -> std::io::Result<ProducerCommandResult> {
+    let ws_name = workspace_name.unwrap_or("default");
+    let workspace_root = cwd.join(".nova").join("workspaces").join(ws_name);
+    let ws_path = workspace_root.join("workspace.json");
+    let (ws, next_action) = if ws_path.exists() {
+        let content = fs::read_to_string(&ws_path)?;
+        let ws: runtime::producer::ProducerWorkspace = serde_json::from_str(&content).unwrap_or_else(|_| runtime::producer::ProducerWorkspace::new(ws_name, cwd.to_path_buf()));
+        let action = runtime::producer::suggest_next_action(&ws);
+        (ws, action)
+    } else {
+        let ws = runtime::producer::ProducerWorkspace::new(ws_name, cwd.to_path_buf());
+        let action = runtime::producer::suggest_next_action(&ws);
+        (ws, action)
+    };
+
+    let lines = vec![
+        format!("╔══════════════════════════════════════════════════════════════╗"),
+        format!("║  NOVA PRODUCER OS — Dashboard                                ║"),
+        format!("╠══════════════════════════════════════════════════════════════╣"),
+        format!("║  Workspace:  {:<48} ║", ws.name),
+        format!("║  Stage:      {:<48} ║", ws.current_stage.to_string()),
+        format!("╠══════════════════════════════════════════════════════════════╣"),
+        format!("║  NEXT ACTION                                                  ║"),
+        format!("║  ➜ {}                                          ║", next_action.command),
+        format!("║     {}                                        ║", next_action.reason),
+        format!("╚══════════════════════════════════════════════════════════════╝"),
+    ];
+
+    let message = lines.join("\n");
+    Ok(ProducerCommandResult { message, reload_runtime: false })
+}
+
+/// List artifacts in the current workspace.
+pub fn handle_artifacts_slash_command(cwd: &Path, workspace_name: Option<&str>) -> std::io::Result<ProducerCommandResult> {
+    let ws_name = workspace_name.unwrap_or("default");
+    let artifacts_dir = cwd.join(".nova").join("workspaces").join(ws_name).join("artifacts");
+    let mut files = Vec::new();
+    if artifacts_dir.is_dir() {
+        for entry in fs::read_dir(&artifacts_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                files.push(entry.file_name().to_string_lossy().to_string());
+            }
+        }
+    }
+    files.sort();
+    let message = if files.is_empty() {
+        "No artifacts yet. Run a stage to generate artifacts.".to_string()
+    } else {
+        format!("Artifacts:\n{}", files.iter().map(|f| format!("  • {f}")).collect::<Vec<_>>().join("\n"))
+    };
+    Ok(ProducerCommandResult { message, reload_runtime: false })
+}
+
+/// Enter a stage overview.
+pub fn handle_stage_slash_command(stage: Option<&str>) -> std::io::Result<ProducerCommandResult> {
+    let Some(stage) = stage else {
+        return Ok(ProducerCommandResult {
+            message: "Stages: slate → package → finance → comply → launch".to_string(),
+            reload_runtime: false,
+        });
+    };
+    let message = format!(
+        "Entered {stage} stage.\nUse `/run {stage} <command>` to execute stage tools."
+    );
+    Ok(ProducerCommandResult { message, reload_runtime: false })
 }
 
 #[cfg(test)]

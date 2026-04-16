@@ -2949,7 +2949,13 @@ fn run_resume_command(
         | SlashCommand::Ide { .. }
         | SlashCommand::Tag { .. }
         | SlashCommand::OutputStyle { .. }
-        | SlashCommand::AddDir { .. } => Err("unsupported resumed slash command".into()),
+        | SlashCommand::AddDir { .. }
+        | SlashCommand::Workspaces
+        | SlashCommand::Workspace { .. }
+        | SlashCommand::Dashboard
+        | SlashCommand::Artifacts
+        | SlashCommand::Stage { .. }
+        | SlashCommand::Run { .. } => Err("unsupported resumed slash command".into()),
     }
 }
 
@@ -3137,6 +3143,7 @@ struct LiveCli {
     runtime: BuiltRuntime,
     session: SessionHandle,
     prompt_history: Vec<PromptHistoryEntry>,
+    active_workspace: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -3645,6 +3652,7 @@ impl LiveCli {
             runtime,
             session,
             prompt_history: Vec::new(),
+            active_workspace: None,
         };
         cli.persist_session()?;
         Ok(cli)
@@ -3964,6 +3972,54 @@ impl LiveCli {
                 self.print_prompt_history(count.as_deref());
                 false
             }
+            SlashCommand::Workspaces => {
+                let cwd = env::current_dir().expect("current dir");
+                match commands::handle_workspaces_slash_command(&cwd) {
+                    Ok(result) => println!("{}", result.message),
+                    Err(error) => eprintln!("error: {error}"),
+                }
+                false
+            }
+            SlashCommand::Workspace { name } => {
+                let cwd = env::current_dir().expect("current dir");
+                match commands::handle_workspace_slash_command(name.as_deref(), &cwd) {
+                    Ok(result) => {
+                        println!("{}", result.message);
+                        if result.reload_runtime {
+                            self.active_workspace = name.clone();
+                        }
+                    }
+                    Err(error) => eprintln!("error: {error}"),
+                }
+                false
+            }
+            SlashCommand::Dashboard => {
+                let cwd = env::current_dir().expect("current dir");
+                match commands::handle_dashboard_slash_command(&cwd, self.active_workspace.as_deref()) {
+                    Ok(result) => println!("{}", result.message),
+                    Err(error) => eprintln!("error: {error}"),
+                }
+                false
+            }
+            SlashCommand::Artifacts => {
+                let cwd = env::current_dir().expect("current dir");
+                match commands::handle_artifacts_slash_command(&cwd, self.active_workspace.as_deref()) {
+                    Ok(result) => println!("{}", result.message),
+                    Err(error) => eprintln!("error: {error}"),
+                }
+                false
+            }
+            SlashCommand::Stage { stage } => {
+                match commands::handle_stage_slash_command(stage.as_deref()) {
+                    Ok(result) => println!("{}", result.message),
+                    Err(error) => eprintln!("error: {error}"),
+                }
+                false
+            }
+            SlashCommand::Run { args } => {
+                self.handle_producer_run(args.as_deref());
+                false
+            }
             SlashCommand::Stats => {
                 let usage = UsageTracker::from_session(self.runtime.session()).cumulative_usage();
                 println!("{}", format_cost_report(usage));
@@ -4016,6 +4072,46 @@ impl LiveCli {
                 false
             }
         })
+    }
+
+    fn handle_producer_run(&mut self, args: Option<&str>) {
+        let cmd = args.unwrap_or("status");
+        let cwd = env::current_dir().expect("current dir");
+        let workspace = self.active_workspace.clone().unwrap_or_else(|| "default".to_string());
+
+        if cmd == "status" {
+            let input = serde_json::json!({
+                "workspace_name": workspace,
+                "run_id": "",
+                "cwd": cwd.display().to_string(),
+            });
+            match tools::execute_tool("ProducerRunStatus", &input) {
+                Ok(result) => println!("{result}"),
+                Err(error) => eprintln!("error: {error}"),
+            }
+            return;
+        }
+
+        let tokens: Vec<&str> = cmd.split_whitespace().collect();
+        if tokens.len() >= 3 && tokens[0] == "slate" && tokens[1] == "analyze" {
+            let slate_file = tokens.get(2).and_then(|t| t.strip_prefix("--slate=")).or_else(|| {
+                tokens.iter().position(|&t| t == "--slate").and_then(|i| tokens.get(i + 1).copied())
+            });
+            let input = serde_json::json!({
+                "workspace_name": workspace,
+                "slate_file": slate_file,
+                "cwd": cwd.display().to_string(),
+            });
+            println!("Starting Slate analysis for workspace '{}'...", workspace);
+            match tools::execute_tool("ProducerSlateAnalyze", &input) {
+                Ok(result) => println!("{result}"),
+                Err(error) => eprintln!("error: {error}"),
+            }
+            return;
+        }
+
+        println!("Starting producer run: {cmd}");
+        println!("(Use `/run slate analyze --slate <file>` for Slate stage)");
     }
 
     fn persist_session(&self) -> Result<(), Box<dyn std::error::Error>> {

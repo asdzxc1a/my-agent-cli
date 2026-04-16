@@ -28,6 +28,7 @@ pub mod mcp_tool_bridge;
 mod oauth;
 pub mod permission_enforcer;
 mod permissions;
+pub mod producer;
 pub mod plugin_lifecycle;
 mod policy_engine;
 mod prompt;

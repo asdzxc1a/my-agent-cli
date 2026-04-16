@@ -1,3 +1,5 @@
+mod producer_plugin;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -1168,6 +1170,36 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             }),
             required_permission: PermissionMode::DangerFullAccess,
         },
+        ToolSpec {
+            name: "ProducerSlateAnalyze",
+            description: "Run a Slate analysis on a producer workspace.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "workspace_name": { "type": "string" },
+                    "slate_file": { "type": "string" },
+                    "cwd": { "type": "string" }
+                },
+                "required": ["workspace_name", "cwd"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "ProducerRunStatus",
+            description: "Check the status of a producer run.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "workspace_name": { "type": "string" },
+                    "run_id": { "type": "string" },
+                    "cwd": { "type": "string" }
+                },
+                "required": ["workspace_name", "cwd"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
     ]
 }
 
@@ -1286,6 +1318,8 @@ fn execute_tool_with_enforcer(
         "TestingPermission" => {
             from_value::<TestingPermissionInput>(input).and_then(run_testing_permission)
         }
+        "ProducerSlateAnalyze" => producer_plugin::run_slate_analyze(input),
+        "ProducerRunStatus" => producer_plugin::run_status(input),
         _ => Err(format!("unsupported tool: {name}")),
     }
 }
